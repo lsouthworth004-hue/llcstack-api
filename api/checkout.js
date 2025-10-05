@@ -118,7 +118,6 @@ module.exports = async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       mode,
       customer: customer.id,
-      customer_email: email,
       line_items,
       // save card for later if doing one-time only (handy if you add subs later)
       payment_intent_data: mode === 'payment' ? { setup_future_usage: 'off_session' } : undefined,
