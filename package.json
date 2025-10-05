@@ -1,0 +1,9 @@
+{
+  "name": "llcstack-api",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "stripe": "^16.8.0"
+  }
+}
