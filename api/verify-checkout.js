@@ -1,7 +1,9 @@
 const Stripe = require('stripe')
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
 
-const ALLOW_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || '*'
+const ALLOW_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || // replace '*' with your site to avoid CORS blocks
+const ALLOW_ORIGIN = 'https://llcstack.com'
+
 function cors(res){
   res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN)
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
