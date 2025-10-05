@@ -79,13 +79,11 @@ function buildOneTimeItems(state, add_ons = {}, legal_name = 'LLC'){
 // Build recurring items (subscriptions)
 function buildRecurringItems(add_ons = {}){
   const rec = []
-  if(add_ons.ra){
-    if(!RA_PRICE_ID) throw new Error('Registered Agent selected but RA_YEARLY_PRICE_ID is not set')
-    rec.push({ price: RA_PRICE_ID, quantity: 1 })
+  if(add_ons.ra && process.env.RA_YEARLY_PRICE_ID){
+    rec.push({ type: 'ra', item: { price: process.env.RA_YEARLY_PRICE_ID, quantity: 1 } })
   }
-  if(add_ons.mail_forwarding){
-    if(!MAIL_PRICE_ID) throw new Error('Mail Forwarding selected but MAIL_MONTHLY_PRICE_ID is not set')
-    rec.push({ price: MAIL_PRICE_ID, quantity: 1 })
+  if(add_ons.mail_forwarding && process.env.MAIL_MONTHLY_PRICE_ID){
+    rec.push({ type: 'mail', item: { price: process.env.MAIL_MONTHLY_PRICE_ID, quantity: 1 } })
   }
   return rec
 }
@@ -102,16 +100,32 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error:'Missing required fields' })
     }
 
-    // one-time items are always included
     const oneTime = buildOneTimeItems(state, add_ons, legal_name)
 
-    // if RA or Mail is selected → subscription mode; otherwise payment mode
-    const recurring = buildRecurringItems(add_ons)
-    const mode = recurring.length ? 'subscription' : 'payment'
-    const line_items = recurring.length ? [...recurring, ...oneTime] : oneTime
+    // recurring selection with interval constraint handling
+    const rec = buildRecurringItems(add_ons)
+    let mode = 'payment'
+    let line_items = oneTime
+    let deferRecurring = null  // which recurring to create later in webhook
 
-    // create (simple) customer record in Stripe
-    const customer = await stripe.customers.create({ email })
+    if(rec.length === 1){
+      mode = 'subscription'
+      line_items = [rec[0].item, ...oneTime]
+    } else if (rec.length === 2){
+      // Stripe limitation: different billing intervals can't be in same Checkout
+      // We'll include RA in checkout and defer Mail (or flip if you prefer)
+      const primary = rec.find(r => r.type === 'ra') || rec[0]
+      const secondary = rec.find(r => r.type !== primary.type)
+
+      mode = 'subscription'
+      line_items = [primary.item, ...oneTime]
+      deferRecurring = secondary.type  // 'mail' (or 'ra' if you flip)
+    }
+
+    // create/find customer
+    let customer
+    const existing = await stripe.customers.list({ email, limit: 1 })
+    customer = existing.data[0] || await stripe.customers.create({ email })
 
     const site = process.env.NEXT_PUBLIC_SITE_URL || 'https://llcstack.com'
 
@@ -119,7 +133,7 @@ module.exports = async (req, res) => {
       mode,
       customer: customer.id,
       line_items,
-      // save card for later if doing one-time only (handy if you add subs later)
+      // save card automatically in subscription mode; in payment mode, save for later
       payment_intent_data: mode === 'payment' ? { setup_future_usage: 'off_session' } : undefined,
       success_url: `${site}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${site}/checkout-cancelled`,
@@ -128,6 +142,7 @@ module.exports = async (req, res) => {
         supabase_entity_id: entity_id,
         state,
         add_ons: JSON.stringify(add_ons),
+        defer_recurring: deferRecurring || ''  // '' | 'mail' | 'ra'
       },
     })
 
@@ -137,3 +152,4 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: err?.message || 'Checkout error' })
   }
 }
+
