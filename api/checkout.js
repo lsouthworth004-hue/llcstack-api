@@ -16,7 +16,7 @@ function cors(res){
 
 // ---------- EDIT THESE PRICES (amounts in cents) ----------
 const STATE_BASE = {
-  FL: 0000, DE: 0000, WY: 0000, CO: 0000, NY: 0000,
+  FL: 400, DE: 400, WY: 400, CO: 400, NY: 400,
   // add more states...
 }
 const STATE_FILING_FEES = {
